@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd Desktop
+python3 GUI_tk_pil.py 
