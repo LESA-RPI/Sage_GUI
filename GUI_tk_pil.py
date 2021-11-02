@@ -72,6 +72,7 @@ class PhotoBoothApp:
         #save people's name and testing time
         self.name = ""
         self.name_list = []
+        self.com = ""
 
         # stop watch: Maybe don't need ###############################################
         #self.time_seconds = None
@@ -100,6 +101,11 @@ class PhotoBoothApp:
         self.entry = tki.Entry()
         self.entry.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
         
+        # enter commit
+        self.entry_com = tki.Entry()
+        self.entry_com.insert(END, 'Please briefly describe the actions collected this time here.')
+        self.entry_com.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
+
         # hint to enter name
         self.Message = tki.Label(text="Please enter test ID here")
         self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
@@ -247,8 +253,9 @@ class PhotoBoothApp:
             
     def btn_fun(self):
 
-        if self.btn_st_idx == 0: # state 0 : enter time and name
+        if self.btn_st_idx == 0: # state 0 : enter time, name, and commit
             self.name = self.entry.get()
+            self.com = self.entry_com.get()
             self.Message.configure(text = self.name+" Ready to record")
             same_name_num = self.name_list.count(self.name)
             self.name_list.append(self.name)
@@ -262,12 +269,16 @@ class PhotoBoothApp:
         elif self.btn_st_idx == 1: # state 1 : click to record data
             fileName = self.folderName +"/" +self.name + '.txt'
             with open(fileName, "a") as f:
+                f.write("Test ID: %s" % self.entry.get())
+                f.write('\n')
+                f.write(self.com)
+                f.wirte('\n')
                 f.write("time stamp            ")
                 for i in range(16):
-                    f.write("  p%2d "%i)
+                    f.write("  p%02d "%i)
                 f.write(' ')
                 for i in range(16):
-                    f.write("  p%2d "%i)
+                    f.write("  c%02d "%i)
                 f.write("\n")
                         
             self.btn_st_idx = 2
