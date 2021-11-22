@@ -42,15 +42,48 @@ def getDf():
         if i==2:
             return(line.split()[0:6])
 
-
+# class WaitWindow:
+#     global vs
+#     def __init__(self,args):
+#         self.window = tki.Tk()
+#         self.window.title('Please wait')
+#         self.window['width']=400
+#         self.window['height']=300
+#         
+#         
+#         self.Message = tki.Label(text="Please wait several seconds to warmint the camera and ToF sensor.")
+#         self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
+#         
+#         self.t = threading.Thread(target = self.warmCamera(args))
+#         self.t.start()
+#         self.window.mainloop()
+#     
+#     def warmCamera(self,args):
+#         time.sleep(2) 
+#         GPIO.setmode(GPIO.BCM)
+#         GPIO.setup(27,GPIO.OUT)
+#         GPIO.output(27,1)
+#         self.Message.configure(text = " VL53L5cx opened \n [INFO] warming up camera...")
+#         print("VL53L5cx opened")
+#         print("[INFO] warming up camera...")
+#         vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
+#         time.sleep(2)
+#         self.quit()
+#     
+#     def quit(self):
+#         self.window.destroy()
+        
 class PhotoBoothApp:
-    mode = 4
-    frame_rate = 15
+    
 
     def __init__(self, vs):
         # store the video stream object and output path, then initialize
 		# the most recently read frame, thread for reading frames, and
 		# the thread stop event
+        
+        #working model and frame rate for ToF sensors
+        self.mode = 4
+        self.frame_rate = 15
         
         # video
         self.vs = vs
@@ -88,9 +121,21 @@ class PhotoBoothApp:
         self.panel = None
         self.panel_tof = None
         
+        # create a check button to determine the ToF working mode
+        self.chkValue = tki.BooleanVar()
+        self.checkbutton = tki.Checkbutton(self.root, text='Use 8x8 mode or not?', var = self.chkValue)
+        self.checkbutton.deselect()
+        self.checkbutton.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
+        # print("check value is ")
+        # print(self.chkValue.get())
+        if self.chkValue.get():
+            self.tof = TOFRanging(8, 15)
+        else:
+            self.tof = TOFRanging(4, 30)
+            
         # create a button, that when pressed, will take the current
 		# frame and save it to file
-        self.btn_st = ["Enter Name", "Record", "End recording","..."]
+        self.btn_st = ["Select ToF mode","Enter Name", "Record", "End recording","..."]
         self.btn_st_idx = 0 # this can be 0,1,2
 
         # button
@@ -101,14 +146,18 @@ class PhotoBoothApp:
         self.entry = tki.Entry()
         self.entry.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
         
-        # enter commit
-        self.entry_com = tki.Entry()
-        self.entry_com.insert(END, 'Please briefly describe the actions collected this time here.')
-        self.entry_com.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
-
         # hint to enter name
         self.Message = tki.Label(text="Please enter test ID here")
         self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
+
+        # enter commit
+        self.entry_com = tki.Entry()
+        self.entry_com.insert(0,'Please briefly describe the actions collected this time here.')
+        self.entry_com.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
+
+        # hint to enter name
+        self.Message_com = tki.Label(text="Please briefly describe the actions collected here")
+        self.Message_com.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
 
         # enter the seconds // 
         #self.second_entry = tki.Entry()
@@ -173,7 +222,7 @@ class PhotoBoothApp:
             self.Memory.configure(text = "Used Storage "+dist_root[2] +", Available Storage " +dist_root[3] + ", Used " + dist_root[4])
             
     def update_StopWatch(self):
-        if self.btn_st_idx == 2 or self.btn_st_idx == 3:
+        if self.btn_st_idx == 3 or self.btn_st_idx == 4:
             self.StopWatch.configure(text=str(self.StopWatch_counting))
             self.StopWatch_counting += 1
         else:
@@ -192,8 +241,12 @@ class PhotoBoothApp:
         while not self.stopEvent.is_set():
             time_stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S%f")
             self.tof.Ranging()
-            if self.btn_st_idx == 2:
-                fileName = self.folderName +"/" +self.name + '.txt'
+            if self.btn_st_idx == 3:
+                if self.chkValue.get():
+                    fileName = self.folderName +"/" +self.name + '_8x8' + '.txt'
+                else:
+                    fileName = self.folderName +"/" +self.name + '_4x4' + '.txt'
+                    
                 with open(fileName, "a") as f:
                     f.write(time_stamp)
                     f.write(" ")
@@ -220,9 +273,9 @@ class PhotoBoothApp:
                 height, width, layers = self.frame.shape
                 size = (width,height)
                 
-                if self.btn_st_idx == 1:
+                if self.btn_st_idx == 2:
                     self.out = cv2.VideoWriter(self.folderName +"/" +self.name + '.avi',cv2.VideoWriter_fourcc(*'DIVX'), 45, size)
-                elif self.btn_st_idx == 2 or self.btn_st_idx == 3:
+                elif self.btn_st_idx == 3 or self.btn_st_idx == 4:
                     self.out.write(self.frame)
                 else:
                     if self.out is not None:
@@ -252,41 +305,71 @@ class PhotoBoothApp:
             print("[INFO] caught a RuntimeError")
             
     def btn_fun(self):
-
-        if self.btn_st_idx == 0: # state 0 : enter time, name, and commit
+        if self.btn_st_idx == 0:
+            self.Message.configure(text = "Please select the ToF mode")
+            self.btn_st_idx = 1
+            
+        if self.btn_st_idx == 1: # state 1 : enter time, name, and commit
             self.name = self.entry.get()
             self.com = self.entry_com.get()
-            self.Message.configure(text = self.name+" Ready to record")
+            self.Message.configure(text = self.name+" Ready to record, please wait two seconds")
+
+            if self.chkValue.get():
+                self.tof = TOFRanging(8, 15)
+            else:
+                self.tof = TOFRanging(4, 30)
+                
+            self.result = None
+            
             same_name_num = self.name_list.count(self.name)
             self.name_list.append(self.name)
             if same_name_num > 0:
                 self.name = self.name+str(same_name_num)
             
-            self.btn_st_idx = 1
+            self.btn_st_idx = 2
 
 
             
-        elif self.btn_st_idx == 1: # state 1 : click to record data
-            fileName = self.folderName +"/" +self.name + '.txt'
-            with open(fileName, "a") as f:
-                f.write("Test ID: %s" % self.entry.get())
-                f.write('\n')
-                f.write(self.com)
-                f.wirte('\n')
-                f.write("time stamp            ")
-                for i in range(16):
-                    f.write("  p%02d "%i)
-                f.write(' ')
-                for i in range(16):
-                    f.write("  c%02d "%i)
-                f.write("\n")
+        elif self.btn_st_idx == 2: # state 2 : click to record data
+           # self.checkbutton(state=tki.DISABLED)
+            if self.chkValue.get():
+                fileName = self.folderName +"/" +self.name + '_8x8' + '.txt'
+                with open(fileName, "a") as f:
+                    f.write("Test ID: %s" % self.entry.get())
+                    f.write('\n')
+                    f.write('8x8 mode \n')
+                    f.write(self.com)
+                    f.write('\n')
+                    f.write("time stamp            ")
+                    for i in range(64):
+                        f.write("  p%02d "%i)
+                    f.write(' ')
+                    for i in range(64):
+                        f.write("  c%02d "%i)
+                    f.write("\n")
+            else:
+                fileName = self.folderName +"/" +self.name + '_4x4' + '.txt'
+                with open(fileName, "a") as f:
+                    f.write("Test ID: %s" % self.entry.get())
+                    f.write('\n')
+                    f.write('4x4 mode \n')
+                    f.write(self.com)
+                    f.write('\n')
+                    f.write("time stamp            ")
+                    for i in range(16):
+                        f.write("  p%02d "%i)
+                    f.write(' ')
+                    for i in range(16):
+                        f.write("  c%02d "%i)
+                    f.write("\n")
                         
-            self.btn_st_idx = 2
+            self.btn_st_idx = 3
             self.Message.configure(text = " recording")
 
             
-        elif self.btn_st_idx == 2 or self.btn_st_idx == 3:
+        elif self.btn_st_idx == 3 or self.btn_st_idx == 4:
             self.btn_st_idx = 0
+            #self.checkbutton(state=tki.ENABLED)
             self.Message.configure(text = " Enter name")
         
         else: # reset
@@ -301,6 +384,7 @@ class PhotoBoothApp:
 		# set the stop event, cleanup the camera, and allow the rest of
 		# the quit process to continue
         print("[INFO] closing...")
+        self.out.release()
         self.stopEvent.set()
         self.vs.stop()
         self.tof.EndToF()
@@ -390,13 +474,17 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-p", "--picamera", type=int, default=-1, help="whether or not the Raspberry Pi camera should be used")
 args = vars(ap.parse_args())
 # initialize the video stream and allow the camera sensor to warmup
+
+
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(27,GPIO.OUT)
 GPIO.output(27,1)
 print("VL53L5cx opened")
 print("[INFO] warming up camera...")
 vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
-time.sleep(0.5)
+time.sleep(2)
+
+
 # start the app
 pba = PhotoBoothApp(vs)
 pba.root.mainloop()
