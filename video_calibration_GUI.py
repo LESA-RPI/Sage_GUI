@@ -67,9 +67,10 @@ class PhotoBoothApp:
         self.out = None # video output object
 
         #save the line's parameter A,B,C respond to the tof pixel
-        self.tof_pixel_order = None
+        self.tof_pixel_order = 0
         self.tof_pixel_points = dict()
         self.tof_pixel_line = dict()
+
 
         # initialize the root window and image panel
         self.root = tki.Tk()
@@ -93,7 +94,8 @@ class PhotoBoothApp:
         self.entry = tki.Entry()
         self.entry.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
         
-        
+        self.btn_save = tki.Button(self.root, text="Click to save the pixels", command=self.btn_save_fun)
+        self.btn_save.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
 
         # enter the seconds // 
         #self.second_entry = tki.Entry()
@@ -216,42 +218,53 @@ class PhotoBoothApp:
     def btn_fun(self):
 
         if self.btn_st_idx == 0: # state 0 : enter time and name
-            self.name = self.entry.get()
-            self.Message.configure(text = self.name+" Ready to record")
-            same_name_num = self.name_list.count(self.name)
-            self.name_list.append(self.name)
-            if same_name_num > 0:
-                self.name = self.name+str(same_name_num)
+            self.tof_pixel_order = self.entry.get()
+
+            if self.tof_pixel_order not in self.tof_pixel_points:
+                self.tof_pixel_points[self.tof_pixel_order] = []
+                self.tof_pixel_line[self.tof_pixel_order] = []
             
             self.btn_st_idx = 1
-
-
             
         elif self.btn_st_idx == 1: # state 1 : click to record data
-            fileName = self.folderName +"/" +self.name + '.txt'
-            with open(fileName, "a") as f:
-                f.write("time stamp            ")
-                for i in range(16):
-                    f.write("  p%2d "%i)
-                f.write(' ')
-                for i in range(16):
-                    f.write("  p%2d "%i)
-                f.write("\n")
-                        
-            self.btn_st_idx = 2
-            self.Message.configure(text = " recording")
-
-            
-        elif self.btn_st_idx == 2 or self.btn_st_idx == 3:
+            cv2.imshow('img_show', self.frame)
+            cv2.setMouseCallback('img_show', self.click_event)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
             self.btn_st_idx = 0
-            self.Message.configure(text = " Enter name")
-        
+                    
         else: # reset
             self.btn_st_idx = 0
-            self.Message.configure(text = "reseted, enter new name")
-            
+                        
         self.btn['text'] = self.btn_st[self.btn_st_idx]
         
+    def btn_save_fun(self):
+
+        f_name = 'pixels.txt'
+        with open(f_name, "a") as f:
+            for i in self.tof_pixel_points:
+                f.write(str(i))
+                f.write(" : ")
+                for pixels in self.tof_pixel_points[i]:
+                    f.write("(")
+                    f.write(str(pixels[0]))
+                    f.write(",")
+                    f.write(str(pixels[1]))
+                    f.write(")")
+                    f.write(" ")
+                f.write("\n")
+
+    def click_event(self, event, x, y, flags, params):
+        global point_list
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            print(x, " ", y)
+            self.tof_pixel_points[self.tof_pixel_order].append((x,y))
+            cv2.circle(self.frame,(x,y),3,(255,0,0),-1)
+            cv2.imshow('img_show',self.frame)
+
+        if event == cv2.EVENT_RBUTTONDOWN:
+            pass
 
         
     def onClose(self):
