@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Sep  8 17:53:07 2021
+Created on Mon 12/27/2021
 
 @author: luh6r
 
-TOF orientation:
-
-|-----------------------|
-|                       |
-|                       |
-|                       |
-|                       |
-|       15 11  7  3     |
-|       14 10  6  2     |
-|       13  9  5  1     |===
-|       12  8  4  0     |
-|-----------------------|
+Goal: collect more than 3 point for each pixel and compute the line
+Including: 
+    1. GUI 
+        a. show the real time RGB image and ToF readings,
+        b. a click button to pop out the current frame need to be marked
+        c. entry line to show the pixel number
+    2. RGB frame
+        click to mark the pixel location
+        
 """
 from __future__ import print_function
 from PIL import Image
@@ -42,48 +39,15 @@ def getDf():
         if i==2:
             return(line.split()[0:6])
 
-# class WaitWindow:
-#     global vs
-#     def __init__(self,args):
-#         self.window = tki.Tk()
-#         self.window.title('Please wait')
-#         self.window['width']=400
-#         self.window['height']=300
-#         
-#         
-#         self.Message = tki.Label(text="Please wait several seconds to warmint the camera and ToF sensor.")
-#         self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
-#         
-#         self.t = threading.Thread(target = self.warmCamera(args))
-#         self.t.start()
-#         self.window.mainloop()
-#     
-#     def warmCamera(self,args):
-#         time.sleep(2) 
-#         GPIO.setmode(GPIO.BCM)
-#         GPIO.setup(27,GPIO.OUT)
-#         GPIO.output(27,1)
-#         self.Message.configure(text = " VL53L5cx opened \n [INFO] warming up camera...")
-#         print("VL53L5cx opened")
-#         print("[INFO] warming up camera...")
-#         vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
-#         time.sleep(2)
-#         self.quit()
-#     
-#     def quit(self):
-#         self.window.destroy()
-        
+
 class PhotoBoothApp:
-    
+    mode = 4
+    frame_rate = 15
 
     def __init__(self, vs):
         # store the video stream object and output path, then initialize
 		# the most recently read frame, thread for reading frames, and
 		# the thread stop event
-        
-        #working model and frame rate for ToF sensors
-        self.mode = 4
-        self.frame_rate = 15
         
         # video
         self.vs = vs
@@ -102,62 +66,36 @@ class PhotoBoothApp:
         #save video
         self.out = None # video output object
 
-        #save people's name and testing time
-        self.name = ""
-        self.name_list = []
-        self.com = ""
+        #save the line's parameter A,B,C respond to the tof pixel
+        self.tof_pixel_order = 0
+        self.tof_pixel_points = dict()
+        self.tof_pixel_line = dict()
 
-        # stop watch: Maybe don't need ###############################################
-        #self.time_seconds = None
-        self.StopWatch_counting = 0
-        
-        # save file name 
-        #self.fileName = "data.txt" # May don't need ##################################################
-        self.folderName = datetime.date.today().strftime("%Y-%m-%d")
-        os.makedirs(self.folderName, exist_ok=True)
-        
+
         # initialize the root window and image panel
         self.root = tki.Tk()
         self.panel = None
         self.panel_tof = None
         
-        # create a check button to determine the ToF working mode
-        self.chkValue = tki.BooleanVar()
-        self.checkbutton = tki.Checkbutton(self.root, text='Use 8x8 mode or not?', var = self.chkValue)
-        self.checkbutton.deselect()
-        self.checkbutton.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
-        # print("check value is ")
-        # print(self.chkValue.get())
-        if self.chkValue.get():
-            self.tof = TOFRanging(8, 15)
-        else:
-            self.tof = TOFRanging(4, 30)
-            
         # create a button, that when pressed, will take the current
 		# frame and save it to file
-        self.btn_st = ["Select ToF mode","Enter Name", "Record", "End recording","..."]
-        self.btn_st_idx = 0 # this can be 0,1,2
+        self.btn_st = ["Click to mark the pixel location", "Current Frame, please mark the pixel","..."]
+        self.btn_st_idx = 0 # this can be 0,1
 
         # button
         self.btn = tki.Button(self.root, text=self.btn_st[self.btn_st_idx], command=self.btn_fun)
         self.btn.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
         
+        # hint to enter name
+        self.Message = tki.Label(text="Please enter the pixel order of ToF here (0~15)")
+        self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
+        
         # enter name
         self.entry = tki.Entry()
         self.entry.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
         
-        # hint to enter name
-        self.Message = tki.Label(text="Please enter test ID here")
-        self.Message.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
-
-        # enter commit
-        self.entry_com = tki.Entry()
-        self.entry_com.insert(0,'Please briefly describe the actions collected this time here.')
-        self.entry_com.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
-
-        # hint to enter name
-        self.Message_com = tki.Label(text="Please briefly describe the actions collected here")
-        self.Message_com.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
+        self.btn_save = tki.Button(self.root, text="Click to save the pixels", command=self.btn_save_fun)
+        self.btn_save.pack(side="bottom", fill="both", expand="yes", padx=10, pady=10)
 
         # enter the seconds // 
         #self.second_entry = tki.Entry()
@@ -172,14 +110,6 @@ class PhotoBoothApp:
         self.Time.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
         self.update_clock()
         
-        # Memory show
-        self.Memory = tki.Label(text = "memory")
-        self.Memory.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
-        
-        # Stop watch 
-        self.StopWatch = tki.Label(text = "", font = ('Arial', 25))
-        self.StopWatch.pack(side="bottom", fill="both", expand="yes", padx=40, pady=40)
-        self.update_StopWatch()
         
 		# start a thread that constantly pools the video sensor for
 		# the most recently read frame
@@ -204,7 +134,19 @@ class PhotoBoothApp:
         '''
         while not self.stopEvent.is_set():
             result = self.tof.result/3000*255
-            resized_result = cv2.resize(result, (200,200), interpolation = cv2.INTER_AREA)
+            resized_result = cv2.resize(result, (400,400), interpolation = cv2.INTER_AREA)
+            
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            fontScale = 1
+            color = (255, 0, 0) # Blue color in BGR
+            thickness = 1 # Line thickness of 2 px
+            for i in range(4):
+                for j in range(4):
+                    org = (i*100, j*100)
+                    # Using cv2.putText() method
+                    resized_result = cv2.putText(resized_result, str(result[i,j]), org, font, 
+                                    fontScale, color, thickness, cv2.LINE_AA)
+            
             image_tof = Image.fromarray(resized_result)
             image_tof = ImageTk.PhotoImage(image_tof)
             # if the panel is not None, we need to initialize it
@@ -219,45 +161,14 @@ class PhotoBoothApp:
                 self.panel_tof.image = image_tof
             
             dist_root = getDf()
-            self.Memory.configure(text = "Used Storage "+dist_root[2] +", Available Storage " +dist_root[3] + ", Used " + dist_root[4])
             
-    def update_StopWatch(self):
-        if self.btn_st_idx == 3 or self.btn_st_idx == 4:
-            self.StopWatch.configure(text=str(self.StopWatch_counting))
-            self.StopWatch_counting += 1
-        else:
-            self.StopWatch_counting = 0
-            self.StopWatch.configure(text=str(self.StopWatch_counting))
-        self.root.after(1000, self.update_StopWatch)
-        
         
     def update_clock(self):
         now = time.strftime("%H:%M:%S")
         self.Time.configure(text=now)
         self.root.after(1000, self.update_clock)
     
-    def w_tof(self):
-        # ranging.ranging.argtypes = [ct.c_char_p, ct.c_char_p]
-        while not self.stopEvent.is_set():
-            time_stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S%f")
-            self.tof.Ranging()
-            if self.btn_st_idx == 3:
-                if self.chkValue.get():
-                    fileName = self.folderName +"/" +self.name + '_8x8' + '.txt'
-                else:
-                    fileName = self.folderName +"/" +self.name + '_4x4' + '.txt'
-                    
-                with open(fileName, "a") as f:
-                    f.write(time_stamp)
-                    f.write(" ")
-                    np.savetxt(f, self.tof.result.reshape((1,-1)), fmt='%5d', newline = ' ')
-                    f.write(" ")
-                    np.savetxt(f, self.tof.status.reshape((1,-1)), fmt='%5d')
-#                     f.write("\n")        
-#                self.tof.SaveRangeData(fileName)
-
-
-
+   
     def videoLoop(self):
 		# DISCLAIMER:
 		# I'm not a GUI developer, nor do I even pretend to be. This
@@ -273,9 +184,9 @@ class PhotoBoothApp:
                 height, width, layers = self.frame.shape
                 size = (width,height)
                 
-                if self.btn_st_idx == 2:
+                if self.btn_st_idx == 1:
                     self.out = cv2.VideoWriter(self.folderName +"/" +self.name + '.avi',cv2.VideoWriter_fourcc(*'DIVX'), 45, size)
-                elif self.btn_st_idx == 3 or self.btn_st_idx == 4:
+                elif self.btn_st_idx == 2 or self.btn_st_idx == 3:
                     self.out.write(self.frame)
                 else:
                     if self.out is not None:
@@ -305,86 +216,61 @@ class PhotoBoothApp:
             print("[INFO] caught a RuntimeError")
             
     def btn_fun(self):
-        if self.btn_st_idx == 0:
-            self.Message.configure(text = "Please select the ToF mode")
+
+        if self.btn_st_idx == 0: # state 0 : enter time and name
+            self.tof_pixel_order = self.entry.get()
+
+            if self.tof_pixel_order not in self.tof_pixel_points:
+                self.tof_pixel_points[self.tof_pixel_order] = []
+                self.tof_pixel_line[self.tof_pixel_order] = []
+            
             self.btn_st_idx = 1
             
-        if self.btn_st_idx == 1: # state 1 : enter time, name, and commit
-            self.name = self.entry.get()
-            self.com = self.entry_com.get()
-            self.Message.configure(text = self.name+" Ready to record, please wait two seconds")
-
-            if self.chkValue.get():
-                self.tof = TOFRanging(8, 15)
-            else:
-                self.tof = TOFRanging(4, 30)
-                
-            self.result = None
-            
-            same_name_num = self.name_list.count(self.name)
-            self.name_list.append(self.name)
-            if same_name_num > 0:
-                self.name = self.name+str(same_name_num)
-            
-            self.btn_st_idx = 2
-
-
-            
-        elif self.btn_st_idx == 2: # state 2 : click to record data
-           # self.checkbutton(state=tki.DISABLED)
-            if self.chkValue.get():
-                fileName = self.folderName +"/" +self.name + '_8x8' + '.txt'
-                with open(fileName, "a") as f:
-                    f.write("Test ID: %s" % self.entry.get())
-                    f.write('\n')
-                    f.write('8x8 mode \n')
-                    f.write(self.com)
-                    f.write('\n')
-                    f.write("time stamp            ")
-                    for i in range(64):
-                        f.write("  p%02d "%i)
-                    f.write(' ')
-                    for i in range(64):
-                        f.write("  c%02d "%i)
-                    f.write("\n")
-            else:
-                fileName = self.folderName +"/" +self.name + '_4x4' + '.txt'
-                with open(fileName, "a") as f:
-                    f.write("Test ID: %s" % self.entry.get())
-                    f.write('\n')
-                    f.write('4x4 mode \n')
-                    f.write(self.com)
-                    f.write('\n')
-                    f.write("time stamp            ")
-                    for i in range(16):
-                        f.write("  p%02d "%i)
-                    f.write(' ')
-                    for i in range(16):
-                        f.write("  c%02d "%i)
-                    f.write("\n")
-                        
-            self.btn_st_idx = 3
-            self.Message.configure(text = " recording")
-
-            
-        elif self.btn_st_idx == 3 or self.btn_st_idx == 4:
+        elif self.btn_st_idx == 1: # state 1 : click to record data
+            cv2.imshow('img_show', self.frame)
+            cv2.setMouseCallback('img_show', self.click_event)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
             self.btn_st_idx = 0
-            #self.checkbutton(state=tki.ENABLED)
-            self.Message.configure(text = " Enter name")
-        
+                    
         else: # reset
             self.btn_st_idx = 0
-            self.Message.configure(text = "reseted, enter new name")
-            
+                        
         self.btn['text'] = self.btn_st[self.btn_st_idx]
         
+    def btn_save_fun(self):
+
+        f_name = 'pixels.txt'
+        with open(f_name, "a") as f:
+            for i in self.tof_pixel_points:
+                f.write(str(i))
+                f.write(" : ")
+                for pixels in self.tof_pixel_points[i]:
+                    f.write("(")
+                    f.write(str(pixels[0]))
+                    f.write(",")
+                    f.write(str(pixels[1]))
+                    f.write(")")
+                    f.write(" ")
+                f.write("\n")
+
+    def click_event(self, event, x, y, flags, params):
+        global point_list
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            print(x, " ", y)
+            self.tof_pixel_points[self.tof_pixel_order].append((x,y))
+            cv2.circle(self.frame,(x,y),3,(255,0,0),-1)
+            cv2.imshow('img_show',self.frame)
+
+        if event == cv2.EVENT_RBUTTONDOWN:
+            pass
 
         
     def onClose(self):
 		# set the stop event, cleanup the camera, and allow the rest of
 		# the quit process to continue
         print("[INFO] closing...")
-        self.out.release()
         self.stopEvent.set()
         self.vs.stop()
         self.tof.EndToF()
@@ -474,17 +360,13 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-p", "--picamera", type=int, default=-1, help="whether or not the Raspberry Pi camera should be used")
 args = vars(ap.parse_args())
 # initialize the video stream and allow the camera sensor to warmup
-
-
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(27,GPIO.OUT)
 GPIO.output(27,1)
 print("VL53L5cx opened")
 print("[INFO] warming up camera...")
 vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
-time.sleep(2)
-
-
+time.sleep(0.5)
 # start the app
 pba = PhotoBoothApp(vs)
 pba.root.mainloop()
